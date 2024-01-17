@@ -1,354 +1,115 @@
-import requests as s
+import requests as req
 import re
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
 
+s = req.session()
 S = '\033[2;36m'
 B = "\033[1;90m"
 
-class EG:
-    def __init__(self):
-        self.inp = input(B+"Enter Name of Product: "+S)
-        self.n = 0
+class Scraper:
+    def __init__(self, domain, country):
+        self.inp = input(f"Enter Name of Product : ")
+        self.n = 1
+        self.domain = domain
+        self.country = country
         self.results = []
         self.scrap()
 
-    def format(self, r):
-        nam = re.findall(r'data-name="([^"]+)', r)
-        con = re.findall(r'class="prc">([^<]+)', r)
-        ur = re.findall(r'class="core" href="/ar/([^"]+)', r)
-        for name, pri, link in zip(nam, con, ur):
+    def format_response(self, response, regex_pattern):
+        nam = re.findall(regex_pattern['name'], response)
+        con = re.findall(regex_pattern['price'], response)
+        ur = re.findall(regex_pattern['url'], response)
+        disc = re.findall(regex_pattern['disco'], response)
+        rate_co = re.findall(regex_pattern['rate_count'], response)
+        rate_va = re.findall(regex_pattern['rate_value'], response)
+        for product_name, product_price, product_link, product_disc, rate_count, rate_value in zip(
+            nam, con, ur, disc, rate_co, rate_va
+        ):
+            rep_link = f"https://www.jumia.{self.domain}/{self.country}/ {product_link}"
+            format_link = "".join(rep_link.split())
             result = {
-                'Description': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.com.eg/ar/{link}'
+                "Discription": product_name,
+                "Price": product_price,
+                "Discount": product_disc,
+                "Num of Rating": rate_count,
+                "Rating Value": f"{rate_value} / 5",
+                "Product Link": format_link,
             }
             self.results.append(result)
+            print(
+                f"""Discription : {product_name}
+Price : {product_price}
+Discount : {product_disc}
+Number of Rating : {rate_count}
+Rating Value : {rate_value} / 5
+Product Link : {format_link}
+============================
+""")
 
-    def format1(self, r):
-        nam = re.findall(r'class="name">([^<]+)', r)
-        con = re.findall(r'class="old">([^<]+)', r)
-        ur = re.findall(r'class="core" href="/ar/([^"]+)', r)
-        for name, pri, link in zip(nam, con, ur):
-            result = {
-                'Description': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.com.eg/ar/{link}'
-            }
-            self.results.append(result)
+    def process_page(self, page):
+        url = f"https://www.jumia.{self.domain}/{self.country}/catalog/?q={self.inp}&page={page}"
+        response = s.get(url).text
+        regex_pattern = {
+            "name": r'class="name">([^<]+)',
+            "price": r'rawPrice":"([^"]+)',
+            "url": r'class="core" href="/([^"]+)',
+            "disco": r'discount":"([^"]+)',
+            "rate_count": r'totalRatings":([^}]+)',
+            "rate_value": r'rating":{"average":([^,]+)',
+        }
+        self.format_response(response, regex_pattern)
 
     def scrap(self):
-        url = f"https://www.jumia.com.eg/ar/catalog/?q={self.inp}"
-        r = s.get(url).text
+        url = f"https://www.jumia.{self.domain}/{self.country}/catalog/?q={self.inp}"
+        response = s.get(url).text
         try:
-            la = r.split('&amp;page=')[5].split('#')[0]
+            la = response.split('&amp;page=')[5].split('#')[0]
             las = int(la)
-            self.format(r)
-            for i in range(las):
-                self.n = 1
-                url1 = f"https://www.jumia.com.eg/ar/catalog/?q={self.inp}&page={self.n}"
-                r = s.get(url1).text
-                self.format(r)
-                
+            regex_pattern = {
+                "name": r'class="name">([^<]+)',
+                "price": r'rawPrice":"([^"]+)',
+                "url": r'class="core" href="/([^"]+)',
+                "disco": r'discount":"([^"]+)',
+                "rate_count": r'totalRatings":([^}]+)',
+                "rate_value": r'rating":{"average":([^,]+)',
+            }
+            self.format_response(response, regex_pattern)
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = [
+                    executor.submit(self.process_page, page)
+                    for page in range(2, las + 1)
+                ]
+                for future in futures:
+                    future.result()
         except:
             print("Error Search\nTrying Method Number 2....")
-            self.format1(r)
+            regex_pattern = {
+                "name": r'class="name">([^<]+)',
+                "price": r'class="prc">([^<]+)',
+                "url": r'class="core" href="/([^"]+)',
+                "disco": r'discount":"([^"]+)',
+                "rate_count": r'totalRatings":([^}]+)',
+                "rate_value": r'rating":{"average":([^,]+)',
+            }
+            self.format_response(response, regex_pattern)
 
         df = pd.DataFrame(self.results)
-
-        file_name = f"Scraping Jumia EG 🇪🇬 [{self.inp}].xlsx"
+        file_name = f"Scraping Jumia [{self.inp}].xlsx"
         df.to_excel(file_name, index=False)
         print("Scrapped Finished Done ✅")
 
 
-class DZ:
-	def __init__(self):
-		self.inp = input(B+"Enter Name of Product: "+S)
-		self.n = 0
-		self.results = []
-		self.scrap()
-		
-	def format(self,r):
-		nam = re.findall(r'data-name="([^"]+)',r)
-		con = re.findall(r'class="prc">([^<]+)',r)
-		ur = re.findall(r'class="core" href="/([^"]+)',r)
-		for name, pri, link in zip(nam, con, ur):
-			result = {
-                'Description': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.dz/{link}',
-			}
-			self.results.append(result)
-	def format1(self,r):
-		nam = re.findall(r'class="name">([^<]+)', r)
-		con = re.findall(r'class="old">([^<]+)', r)
-		ur = re.findall(r'class="core" href="/([^"]+)',r)
-		for name, pri, link in zip(nam, con, ur):
-		  result = {
-                'Description': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.dz/{link}',
-		  }
-		  self.results.append(result)
-		  
-	def scrap(self):
-	       url = f"https://www.jumia.dz/catalog/?q={self.inp}"
-	       r = s.get(url).text
-
-	       try:
-	                la = r.split('&amp;page=')[5].split('#')[0]
-	                las = int(la)
-	                self.format(r)
-	                for i in range(las):
-	                    self.n += 1
-	                    url1 = f"https://www.jumia.dz/catalog/?q={self.inp}&page={self.n}"
-	                    r = s.get(url1).text
-	                    self.format(r)
-	       except:
-	                print("Error Search\nTrying Method Number 2....")
-	                self.format1(r)
-	       df = pd.DataFrame(self.results)
-	       file_name = f"Scraping Jumia DZ 🇩🇿 [{self.inp}].xlsx"
-	       df.to_excel(file_name, index=False)
-	       print("Scrapped Finished Done ✅")
-
-class GH:
-    def __init__(self):
-        self.inp = input(B+"Enter Name of Product: "+S)
-        self.n = 0
-        self.results = []
-        self.scrap()
-
-    def format(self, r):
-        nam = re.findall(r'class="name">([^<]+)',r)
-        con = re.findall(r'class="prc">([^<]+)', r)
-        ur = re.findall(r'class="core" href="/([^"]+)', r)
-        
-        for name, pri, link in zip(nam, con, ur):
-            result = {
-                'Description': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.com.gh/{link}'
-            }
-            self.results.append(result)
-            
-    def format1(self, r):
-        nam = re.findall(r'class="name">([^<]+)', r)
-        con = re.findall(r'class="old">([^<]+)', r)
-        ur = re.findall(r'class="core" href="/([^"]+)', r)
-        for name, pri, link in zip(nam, con, ur):
-            result = {
-                'Description': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.com.gh/{link}'
-            }
-            self.results.append(result)
-            
-    def scrap(self):
-
-        url = f"https://www.jumia.com.gh/catalog/?q={self.inp}"
-        r = s.get(url).text
-        #print(r)
-
-        try:
-                la = r.split('&amp;page=')[5].split('#')[0]
-                las = int(la)
-                self.format(r)
-                for i in range(las):
-                    self.n += 1
-                    url1 = f"https://www.jumia.com.gh/catalog/?q={self.inp}&page={self.n}"
-                    r = s.get(url1).text
-                    #print(r)
-                    self.format(r)
-
-        except:
-                print("Error Search\nTrying Method Number 2....")
-                self.format1(r)
-        df = pd.DataFrame(self.results)
-
-        file_name = f"Scraping Jumia GH 🇬🇭 [{self.inp}].xlsx"
-        df.to_excel(file_name, index=False)
-        print("Scrapped Finished Done ✅")
-
-
-class SN:
-    def __init__(self):
-        self.inp = input(B+"Enter Name of Product: "+S)
-        self.n = 0
-        self.results = []
-        self.scrap()
-
-    def format(self, r):
-        nam = re.findall(r'class="name">([^<]+)',r)
-        con = re.findall(r'class="prc">([^<]+)', r)
-        ur = re.findall(r'class="core" href="/([^"]+)', r)
-        for name, pri, link in zip(nam, con, ur):
-            result = {
-                'Description': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.sn/{link}'
-            }
-            self.results.append(result)
-            
-    def format1(self, r):
-        nam = re.findall(r'class="name">([^<]+)', r)
-        con = re.findall(r'class="old">([^<]+)', r)
-        ur = re.findall(r'class="core" href="/([^"]+)', r)
-        for name, pri, linkr in zip(nam, con, ur):
-            result = {
-                'Description': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.sn/{link}'
-            }
-            self.results.append(result)
-            
-    def scrap(self):
-        url = f"https://www.jumia.sn/catalog/?q={self.inp}"
-        r = s.get(url).text
-        #print(r)
-
-        try:
-                la = r.split('&amp;page=')[5].split('#')[0]
-                las = int(la)
-                self.format(r)
-                for i in range(las):
-                    self.n += 1
-                    url1 = f"https://www.jumia.sn/catalog/?q={self.inp}&page={self.n}"
-                    r = s.get(url1).text
-                    #print(r)
-                    self.format(r)
-                    
-        except:
-                print("Error Search\nTrying Method Number 2....")
-                self.format1(r)
-        df = pd.DataFrame(self.results)
-        file_name = f"Scraping Jumia SEN 🇸🇳 [{self.inp}].xlsx"
-        df.to_excel(file_name, index=False)
-        print("Scrapped Finished Done ✅")
-        
-        
-class NG:
-    def __init__(self):
-        self.inp = input(B+"Enter Name of Product: "+S)
-        self.n = 0
-        self.results = []
-        self.scrap()
-
-    def format(self, r):
-        nam = re.findall(r'class="name">([^<]+)',r)
-        con = re.findall(r'class="prc">([^<]+)', r)
-        ur = re.findall(r'class="core" href="/([^"]+)', r)
-        for name, pri, link in zip(nam, con, ur):
-            result = {
-                'Description': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.com.ng/{link}'
-            }
-            self.results.append(result)
-            
-    def format1(self, r):
-        nam = re.findall(r'class="name">([^<]+)', r)
-        con = re.findall(r'class="old">([^<]+)', r)
-        ur = re.findall(r'class="core" href="/([^"]+)', r)
-        for name, pri, link in zip(nam, con, ur):
-            result = {
-                'Description': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.com.ng/{link}'
-            }
-            self.results.append(result)
-            
-    def scrap(self):
-
-        url = f"https://www.jumia.com.ng/catalog/?q={self.inp}"
-        r = s.get(url).text
-        #print(r)
-
-        try:
-                la = r.split('&amp;page=')[5].split('#')[0]
-                las = int(la)
-                self.format(r)
-                for i in range(las):
-                    self.n += 1
-                    url1 = f"https://www.jumia.com.ng/catalog/?q={self.inp}&page={self.n}"
-                    r = s.get(url1).text
-                    #print(r)
-                    self.format(r)
-                    
-        except:
-                print("Error Search\nTrying Method Number 2....")
-                self.format1(r)
-                
-        df = pd.DataFrame(self.results)
-        file_name = f"Scraping Jumia NG 🇳🇬 [{self.inp}].xlsx"
-        df.to_excel(file_name, index=False)               
-        print("Scrapped Finished Done ✅")
-                        
-class MR:
-    def __init__(self):
-        self.inp = input(B+"Enter Name of Product: "+S)
-        self.n = 0
-        self.results = []
-        self.scrap()
-
-    def format(self, r):
-        nam = re.findall(r'class="name">([^<]+)',r)
-        con = re.findall(r'class="prc">([^<]+)', r)
-        ur = re.findall(r'class="core" href="/([^"]+)', r)
-        for name, pri, link in zip(nam, con, ur):
-            result = {
-                'Description': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.ma/{link}'
-            }
-            self.results.append(result)
-            
-    def format1(self, r):
-        nam = re.findall(r'class="name">([^<]+)', r)
-        con = re.findall(r'class="old">([^<]+)', r)
-        ur = re.findall(r'class="core" href="/([^"]+)', r)
-        for name, pri, link in zip(nam, con, ur):
-            result = {
-                'Description ': name,
-                'Price': pri,
-                'Link of Product': f'https://www.jumia.ma/{link}'
-            }
-            self.results.append(result)
-            
-    def scrap(self):
-
-        url = f"https://www.jumia.ma/catalog/?q={self.inp}"
-        r = s.get(url).text
-        #print(r)
-
-        try:
-                la = r.split('&amp;page=')[5].split('#')[0]
-                las = int(la)
-                self.format(r)
-                for i in range(las):
-                    self.n += 1
-                    url1 = f"https://www.jumia.ma/catalog/?q={self.inp}&page={self.n}"
-                    r = s.get(url1).text
-                    #print(r)
-                    self.format(r)
-                    
-        except:
-                print("Error Search\nTrying Method Number 2....")
-                #print(r)
-                self.format1(r)             
-                   
-        df = pd.DataFrame(self.results)
-        file_name = f"Scraping Jumia MAR 🇲🇦 [{self.inp}].xlsx"
-        df.to_excel(file_name, index=False)
-        print("Scrapped Finished Done ✅")
-class Scraper():
- print(S+f"""				Jumia Scraper {B}By @J2_N2
-				=======================
-				             """)
- nap = input(f"""{S}[1]  EG{B}YPT
+def main():
+    print(S + f"""Welcome To Jumia Web Scraper
+=======================
+                 """)
+    nap = input(
+        f"""{S}[1]  EG{B}YPT
  ——•——•——•——•——•——•——
 {S}[2]  ALGE{B}RIA
 ——•——•——•——•——•——•——
-{S}[3]  GHA{B}N
+{S}[3]  GHA{B}NA
 ——•——•——•——•——•——•——
 {S}[4]  SEN{B}EGAL
 ——•——•——•——•——•——•——
@@ -356,20 +117,23 @@ class Scraper():
 ——•——•——•——•——•——•——
 {S}[6]  MOR{B}OCCO
 {B}====================================
-{S}[~] Cho{B}ose ====> """)
- print('====================================')
+{S}[~] Cho{B}ose ====> """
+    )
+    print("====================================")
 
- if nap == '1':
- 	EG()
- if nap == '2':
- 	DZ()
- if nap == '3':
- 	GH()
- if nap == '4':
- 	SN()
- if nap == '5':
- 	NG()
- if nap == '6':
- 	MR()
+    if nap == "1":
+        scraper = Scraper("com.eg", "ar")
+    elif nap == "2":
+        scraper = Scraper("dz", "ar")
+    elif nap == "3":
+        scraper = Scraper("com.gh", "")
+    elif nap == "4":
+        scraper = Scraper("sn", "")
+    elif nap == "5":
+        scraper = Scraper("com.ng", "")
+    elif nap == "6":
+        scraper = Scraper("ma", "ar")
+
+
 if __name__ == "__main__":
-	Scraper()
+    main()
