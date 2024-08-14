@@ -75,7 +75,7 @@ Product Link : {format_link}
                 "rate_value": r'rating":{"average":([^,]+)',
             }
             self.format_response(response, regex_pattern)
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            with ThreadPoolExecutor(max_workers=20) as executor:
                 futures = [
                     executor.submit(self.process_page, page)
                     for page in range(2, las + 1)
